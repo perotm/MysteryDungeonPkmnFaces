@@ -41,6 +41,7 @@ module PFM
                 face.female = (female == "true")
                 face.shiny = (shiny == "true")
                 face.expression = expression.capitalize()
+                
 
                 face.compute_directory()
                 @dungeon_mystery_faces << face
@@ -98,7 +99,7 @@ module PFM
 
                     curr_expressions = curr_subgroup["portrait_files"].map {|expression, locked| expression}
                     if curr_subgroup["name"] != "" && curr_expressions.length() != 0
-                        names[curr_name] = {"path" => path, "expressions" => curr_expressions}
+                        names[curr_name.capitalize] = {"path" => path, "expressions" => curr_expressions}
                     end
                     subgroups = curr_subgroup["subgroups"]
                     subgroups.each do |subgroup_child|
@@ -113,6 +114,7 @@ module PFM
                 pkmn_faces_tracker_raw = JSON.parse(file_tracker_content)
                 @@pkmn_faces_tracker = parse_tracker(pkmn_faces_tracker_raw)
 
+              
                 @@expressions_converter = 
                 {
                     "Normal" => ["Normal"],
@@ -149,8 +151,9 @@ module PFM
                     expressions_list = [@expression] + @@expressions_converter[@expression]
                     expression_found = false
                     expression_index = 0
-                    while (expression_found == false)
+                    while (expression_found == false && expression_index < expressions_list.length)
                         expression = expressions_list[expression_index]
+                    
                         if @pkmn_form == ""
                             unless try_all_faces_possibilities(current_face_infos, "Alternate", expression)
                                 unless try_all_faces_possibilities(current_face_infos, "AltColor", expression)
@@ -203,6 +206,9 @@ module PFM
 
                 
                 def get_directory
+                    if @directory.nil?
+                        return ""
+                    end
                     return @directory
                 end
                 
@@ -256,6 +262,87 @@ module UI
                 properties.process_look_to
                 viewport.sort_z
             end
+        end
+    end
+end
+
+class Interpreter < Interpreter_RMXP
+    def get_pkmn_data_for_pkmn_face(pokemon)
+        pkmn_id = pokemon.id.to_s
+        female = pokemon.female?
+        shiny = pokemon.shiny?
+
+        return [pkmn_id, pkmn_form(pokemon), female, shiny].join(",")
+    end
+
+    def pkmn_form(pokemon)
+        pkmn_form_id = pokemon.form
+        if pkmn_form_id == 0
+            return ""
+        end
+        form_id = pokemon.get_data().form_text_id.name
+        english_name_form = Studio::Text.get_english_name_form(form_id)
+        
+        decomposed_name_form = english_name_form.split(" ")
+        correct_form_names = ["Mega", "Primal", "Gigantamax", 
+        "Therian", # les génies
+        "Origin", 
+        "East", # Sancoki/tritosor
+        "Sky", # Shaymin
+        "School", # Froussardine
+        "Ultra", #
+        "Hangry", # Morpeko
+        "Dada", 
+        "Hero", # Superdofin
+        "Terastal", 
+        "Stellar"]
+        return_text = ""
+        if correct_form_names.include?(decomposed_name_form[0])
+            return_text = decomposed_name_form[0]
+
+            if decomposed_name_form[0] == "Mega"
+                if decomposed_name_form.length() >= 3 
+                    if decomposed_name_form[2] == "X"
+                       return_text = "Mega_X"
+                    elsif decomposed_name_form[2] == "Y"
+                        return_text = "Mega_Y"
+                    end
+                end
+            end
+        else
+            case decomposed_name_form[0]
+            when "Alolan"
+                return_text = "Alola"
+            when "Galarian"
+                return_text = "Galar"
+            when "Hisuian"
+                return_text = "Hisui"            
+            when "Paldean"
+                return_text = "Paldea"
+            end
+        end
+
+        # cas speciaux à traiter => pikachu, zarbi, mega mewtwo, morphéo, deoxys, cheniti/cheniselle, ceriflor
+        # motisma, arceus, bargantua, darumacho, vivaldaim, kyurem, meloetta, keldeo, genesect, prismillon,
+        # couafarel (pas de sprites), exagide, zygarde, hoopa, plumeline, lougaroc
+        # silvallié, météno, nécrozma, salarsen, zacian/zamazenta, shifours, silveroy, paragruel (??)
+        # famignol, tapatoes, nigirigon, deusolourdo, mordudor, ogerpon, charmilly
+        return return_text
+    end
+end
+
+module Studio
+    module Text
+        module_function
+        def get_english_name_form(form_id)
+            file_id = CSV_BASE + 67
+            if File.exist?(filename = format('Data/Text/Dialogs/%<file_id>d.csv', file_id: file_id))
+                rows = CSV.read(filename)
+                lang_index = 0
+
+                return build_dialog_from_csv_rows(rows, lang_index)[form_id]
+            end
+            return nil
         end
     end
 end
