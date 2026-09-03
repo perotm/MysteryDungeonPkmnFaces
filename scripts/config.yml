@@ -1,0 +1,8 @@
+--- !ruby/object:PluginManager::Config
+name: MysteryDungeonFaces
+authors:
+- LgMarie07
+version: 1.0.0.0
+deps: []
+added_files:
+- graphics/interface/window_pkmn_face.png
