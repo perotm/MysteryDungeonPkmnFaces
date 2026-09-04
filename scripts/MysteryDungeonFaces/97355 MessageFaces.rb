@@ -173,11 +173,11 @@ module PFM
 
                 def try_all_faces_possibilities(face_infos, name_face, expression)
                     if @shiny 
-                        name_face = name_face + "_Shiny"
+                        name_face = name_face + "_shiny"
                     end
                     if @female
-                        if face_infos.has_key?(name_face + "_Female")
-                            name_face = name_face + "_Female"
+                        if face_infos.has_key?(name_face + "_female")
+                            name_face = name_face + "_female"
                         end
                     end
 
