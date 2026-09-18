@@ -2,6 +2,9 @@ module PFM
     module Message
         class Properties
             PROPERTIES["pkmn_face"] = :parse_pkmn_face
+
+            # If the message should contain the name of the pkmn
+            SHOW_PKMN_NAME = true
             # Get all the faces to show
             # @return [Array<Face>]
             attr_reader :dungeon_mystery_faces
@@ -42,9 +45,15 @@ module PFM
                 face.shiny = (shiny == "true")
                 face.expression = expression.capitalize()
                 
-
                 face.compute_directory()
+                show_pkmn_name(face.pkmn_name)
                 @dungeon_mystery_faces << face
+            end
+
+            def show_pkmn_name(pkmn_name, color = 23)
+                if SHOW_PKMN_NAME
+                    @parsed_text = "\u0001[#{color}]#{pkmn_name} : \u0001[0]"+ @parsed_text.gsub(/:\[([^\]]+)\]:/, "")
+                end
             end
 
             class PkmnFace
@@ -75,6 +84,9 @@ module PFM
                 # Get the expresson of the face
                 # @return [String]
                 attr_accessor :expression
+                # Get the name of the pkmn
+                # @return [String]
+                attr_accessor :pkmn_name
                 
                 def PkmnFace.parse_tracker(tracker_json)
                     tracker_result = {}
@@ -143,6 +155,7 @@ module PFM
                     if pkmn_id.to_i == 0
                         pkmn_id =data_creature(pkmn_id.to_sym).id.to_s
                     end
+                    @pkmn_name =data_creature(pkmn_id.to_i).name
                     @pkmn_id = pkmn_id.rjust(4, "0")
                 end
                 
@@ -156,7 +169,7 @@ module PFM
                     
                         if @pkmn_form == ""
                             unless try_all_faces_possibilities(current_face_infos, "Alternate", expression)
-                                unless try_all_faces_possibilities(current_face_infos, "AltColor", expression)
+                                unless try_all_faces_possibilities(current_face_infos, "Altcolor", expression)
                                     expression_found = try_all_faces_possibilities(current_face_infos, "", expression)
                                 else
                                     expression_found = true
