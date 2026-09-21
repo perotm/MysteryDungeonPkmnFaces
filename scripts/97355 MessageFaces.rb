@@ -92,13 +92,13 @@ module PFM
                     tracker_result = {}
                     tracker_json.each do |pkmn_face_info|
                         pkmn_id = pkmn_face_info[0]
-                        names = parse_subgroup(pkmn_face_info[1],previous_name = "", path ="", first_iteration = true)
+                        names = parse_subgroup(pkmn_face_info[1],previous_name = "", path ="", previous_nb_expression = 0, first_iteration = true)
                         tracker_result[pkmn_id] = names
                     end
                     return tracker_result
                 end
                 
-                def PkmnFace.parse_subgroup(curr_subgroup, previous_name = "", path ="", first_iteration = false)
+                def PkmnFace.parse_subgroup(curr_subgroup, previous_name = "", path ="", previous_nb_expression = 0, first_iteration = false)
                     names = {}
                     if curr_subgroup["name"] == "Shiny" or curr_subgroup["name"] == "Female"
                         curr_name = previous_name +"_"+ curr_subgroup["name"]
@@ -110,13 +110,25 @@ module PFM
                     end
 
                     curr_expressions = curr_subgroup["portrait_files"].map {|expression, locked| expression}
+                    curr_nb_expressions = curr_expressions.length()
+
+                    #On supprime si il n'y a pas assez de fichiers alternate
+                    if (curr_name == "Alternate" && curr_nb_expressions < previous_nb_expression*0.75 )
+                        return names
+                    end
+
                     if curr_subgroup["name"] != "" && curr_expressions.length() != 0
                         names[curr_name.capitalize] = {"path" => path, "expressions" => curr_expressions}
                     end
+                    
+                    if curr_subgroup["name"] == ""
+                        curr_nb_expressions = previous_nb_expression
+                    end
+
                     subgroups = curr_subgroup["subgroups"]
                     subgroups.each do |subgroup_child|
                         new_path = File.join(path, subgroup_child[0])
-                        names = names.merge(parse_subgroup(subgroup_child[1], curr_name, new_path))
+                        names = names.merge(parse_subgroup(subgroup_child[1], curr_name, new_path, curr_nb_expressions))
                     end
                     return names
                 end
@@ -178,7 +190,15 @@ module PFM
                                 expression_found = true
                             end
                         else
-                            expression_found = try_all_faces_possibilities(current_face_infos, @pkmn_form, expression)
+                            unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_alternate", expression)
+                                unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_altcolor", expression)
+                                    expression_found = try_all_faces_possibilities(current_face_infos, @pkmn_form, expression)
+                                else
+                                    expression_found = true
+                                end
+                            else
+                                expression_found = true
+                            end
                         end
                         expression_index = expression_index + 1
                     end
