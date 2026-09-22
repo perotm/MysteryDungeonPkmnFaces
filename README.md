@@ -10,6 +10,10 @@ This plugin is used to display various faces of pokemon, with different emotions
 The pokemon faces used by this plugin are stored in *graphics/pictures/pkmn_faces/portrait*, and the tracker used to chose which face to display is stored in *graphics/pictures.pkmn_faces*.
 
 To use this plugin, you have to copy the folder *graphics* in the root folder of your project, and the script (.rb) or the release version (.psdkplug) in your scripts folder.
+If you copied the .psdkplug, you then have to run :
+```bash
+psdk --util=plugin load
+```
 
 If you want to update the faces of this project, you can find them at https://github.com/PMDCollab/SpriteCollab. Then, you must replace your old portrait folder by the new one and your old tracker file by the new one;
 
@@ -73,6 +77,10 @@ Ce plugin permet d'afficher des émotions de différents pokémon lors des messa
 Les visages des Pokémons utilisés par le plugin sont stockés dans *graphics/pictures/pkmn_faces/portrait*, et le tracker permettant de choisir quel visage afficher dans *graphics/pictures/pkmn_faces*.
 
 Vous devez donc copier le dossier *graphics* dans le dossier root de votre projet, ainsi que le script soit en version release (.psdkplug), soit en version script Ruby (.rb) dans votre dossier *scripts*.
+Si vous avez copié le fichier .psdkplug, vous devez alors lancer la commande :
+```bash
+psdk --util=plugin load
+```
 
 Si vous souhaitez mettre à jour les visages utilisés, vous les retrouverez à l'adresse https://github.com/PMDCollab/SpriteCollab.
 Il vous suffira de copier-coller le nouveau dossier portrait à la place de l'ancien, et de remplacer également le fichier de tracker.
