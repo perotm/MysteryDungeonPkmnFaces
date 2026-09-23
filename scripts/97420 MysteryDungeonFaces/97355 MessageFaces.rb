@@ -1,251 +1,248 @@
+module ParsePropertiesPkmnFaces
+    
+    # If the message should contain the name of the pkmn
+    SHOW_PKMN_NAME = true
+    # Get all the faces to show
+    # @return [Array<Face>]
+    attr_reader :dungeon_mystery_faces
+    
+    def initialize(parsed_text)
+        @dungeon_mystery_faces = []
+        super
+    end
+    
+    def parse_pkmn_face(info_str)
+        info_message, info_pokemon = info_str.split('!')
+        position, expression, mirror, opacity = info_message.split(',')
+        pkmn_id, pkmn_form, female, shiny = info_pokemon.split(',')
+        face = PkmnFace.new
+        
+        position.strip!
+        expression.strip!
+        
+        if position == "right" 
+            face.position = -10
+        elsif position == "left"
+            face.position = 10
+        else
+            face.position = position.to_i
+        end  
+        face.set_pkmn_id(pkmn_id)
+        face.opacity = opacity && opacity != "" ? opacity.to_i.clamp(0, 255) : 255
+        face.mirror = mirror == "true"
+        face.pkmn_form = pkmn_form ? pkmn_form.capitalize().strip : ""
+        face.female = (female == "true")
+        face.shiny = (shiny == "true")
+        face.expression = expression.capitalize()
+        
+        face.compute_directory()
+        show_pkmn_name(face.pkmn_name)
+        @dungeon_mystery_faces << face
+    end
+    
+    def show_pkmn_name(pkmn_name, color = 23)
+        if SHOW_PKMN_NAME
+            @parsed_text = "\u0001[#{color}]#{pkmn_name} : \u0001[0]"+ @parsed_text.gsub(/:\[([^\]]+)\]:/, "")
+        end
+    end
+
+    class PkmnFace
+        # Get the face position
+        # @return [Integer]
+        attr_accessor :position
+        # Get the pokemon id in format "0000"
+        # @return [String]
+        attr_accessor :pkmn_id
+        # Get the form of the pokemon
+        # @return [Boolean]
+        attr_accessor :pkmn_form
+        # Get if the pokemn is female
+        # @return [Boolean]
+        attr_accessor :female
+        # Get if the pokemn is shiny
+        # @return [Boolean]
+        attr_accessor :shiny
+        # Get the face opacity
+        # @return [Integer]
+        attr_accessor :opacity
+        # Get the face mirror state
+        # @return [Boolean]
+        attr_accessor :mirror
+        # Get the directory inside the pkmn_id repertory
+        # @return [String]
+        attr_reader :directory
+        # Get the expresson of the face
+        # @return [String]
+        attr_accessor :expression
+        # Get the name of the pkmn
+        # @return [String]
+        attr_accessor :pkmn_name
+        
+        def PkmnFace.parse_tracker(tracker_json)
+            tracker_result = {}
+            tracker_json.each do |pkmn_face_info|
+                pkmn_id = pkmn_face_info[0]
+                names = parse_subgroup(pkmn_face_info[1],previous_name = "", path ="", previous_nb_expression = 0, first_iteration = true)
+                tracker_result[pkmn_id] = names
+            end
+            return tracker_result
+        end
+        
+        def PkmnFace.parse_subgroup(curr_subgroup, previous_name = "", path ="", previous_nb_expression = 0, first_iteration = false)
+            names = {}
+            if curr_subgroup["name"] == "Shiny" or curr_subgroup["name"] == "Female"
+                curr_name = previous_name +"_"+ curr_subgroup["name"]
+            else
+                curr_name = curr_subgroup["name"]
+            end 
+            if first_iteration 
+                curr_name = ""
+            end
+    
+            curr_expressions = curr_subgroup["portrait_files"].map {|expression, locked| expression}
+            curr_nb_expressions = curr_expressions.length()
+    
+            #On supprime si il n'y a pas assez de fichiers alternate
+            if (curr_name == "Alternate" && curr_nb_expressions < previous_nb_expression*0.75 )
+                return names
+            end
+    
+            if curr_subgroup["name"] != "" && curr_expressions.length() != 0
+                names[curr_name.capitalize] = {"path" => path, "expressions" => curr_expressions}
+            end
+            
+            if curr_subgroup["name"] == ""
+                curr_nb_expressions = previous_nb_expression
+            end
+    
+            subgroups = curr_subgroup["subgroups"]
+            subgroups.each do |subgroup_child|
+                new_path = File.join(path, subgroup_child[0])
+                names = names.merge(parse_subgroup(subgroup_child[1], curr_name, new_path, curr_nb_expressions))
+            end
+            return names
+        end
+    
+        
+        file_tracker_content = File.read(File.join('graphics', 'pictures', 'pkmn_faces', "tracker.json"))
+        pkmn_faces_tracker_raw = JSON.parse(file_tracker_content)
+        @@pkmn_faces_tracker = parse_tracker(pkmn_faces_tracker_raw)
+    
+      
+        @@expressions_converter = 
+        {
+            "Normal" => ["Normal"],
+            "Happy" =>["Joyous","Inspired", "Normal"],
+            "Pain" => ["Stunned", "Sad", "Dizzy", "Crying", "Normal"],
+            "Angry" => ["Determined", "Shouting", "Normal"],
+            "Worried" => ["Teary-Eyed", "Stunned", "Sigh", "Normal"],
+            "Sad" => ["Crying", "Teary-Eyed", "Pain", "Normal"],
+            "Crying" => ["Sad", "Teary-Eyed", "Pain", "Normal"],
+            "Shouting"=>["Determined", "Surprised", "Angry", "Normal"],
+            "Teary-Eyed" => ["Sad", "Crying", "Worried", "Normal"],
+            "Determined" => ["Angry", "Shouting", "Normal"],
+            "Joyous" => ["Happy", "Inspired", "Normal"],
+            "Inspired" => ["Happy", "Joyous", "Normal"],
+            "Surprised" => ["Stunned", "Pain", "Normal"],
+            "Dizzy" => ["Stunned", "Pain", "Normal"],
+            "Special0" => ["Normal"],
+            "Special1" => ["Normal"],
+            "Sigh" => ["Pain", "Normal"],
+            "Stunned" => ["Surprised", "Dizzy", "Normal"],
+            "Special2" => ["Normal"],
+            "Special3" => ["Normal"] 
+        }
+    
+        def set_pkmn_id(pkmn_id)
+            if pkmn_id.to_i == 0
+                pkmn_id =data_creature(pkmn_id.to_sym).id.to_s
+            end
+            @pkmn_name =data_creature(pkmn_id.to_i).name
+            @pkmn_id = pkmn_id.rjust(4, "0")
+        end
+        
+        def compute_directory()
+            current_face_infos = @@pkmn_faces_tracker[@pkmn_id]
+            expressions_list = [@expression] + @@expressions_converter[@expression]
+            expression_found = false
+            expression_index = 0
+            while (expression_found == false && expression_index < expressions_list.length)
+                expression = expressions_list[expression_index]
+            
+                if @pkmn_form == ""
+                    unless try_all_faces_possibilities(current_face_infos, "Alternate", expression)
+                        unless try_all_faces_possibilities(current_face_infos, "Altcolor", expression)
+                            expression_found = try_all_faces_possibilities(current_face_infos, "", expression)
+                        else
+                            expression_found = true
+                        end
+                    else
+                        expression_found = true
+                    end
+                else
+                    unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_alternate", expression)
+                        unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_altcolor", expression)
+                            expression_found = try_all_faces_possibilities(current_face_infos, @pkmn_form, expression)
+                        else
+                            expression_found = true
+                        end
+                    else
+                        expression_found = true
+                    end
+                end
+                expression_index = expression_index + 1
+            end
+        end
+    
+        def try_all_faces_possibilities(face_infos, name_face, expression)
+            if @shiny 
+                name_face = name_face + "_shiny"
+            end
+            if @female
+                if face_infos.has_key?(name_face + "_female")
+                    name_face = name_face + "_female"
+                end
+            end
+    
+            if face_exist?(face_infos, name_face, expression)
+                if @mirror && face_exist?(face_infos, name_face, expression + "^")
+                    @directory = File.join(face_infos[name_face]["path"], expression + "^")
+                    @mirror = false
+                else
+                    @directory = File.join(face_infos[name_face]["path"], expression)
+                end
+                return true
+            end
+            return false
+        end
+    
+        def face_exist?(face_infos, name_face, name_expression)
+            unless face_infos.has_key?(name_face) 
+                return false
+            end
+            expressions = face_infos[name_face]["expressions"]
+            unless expressions.include?(name_expression)
+                return false
+            end
+            return true
+        end
+    
+        
+        def get_directory
+            if @directory.nil?
+                return ""
+            end
+            return @directory
+        end
+    end
+end
+
+PFM::Message::Properties.prepend(ParsePropertiesPkmnFaces)
+
 module PFM
     module Message
         class Properties
             PROPERTIES["pkmn_face"] = :parse_pkmn_face
-
-            # If the message should contain the name of the pkmn
-            SHOW_PKMN_NAME = true
-            # Get all the faces to show
-            # @return [Array<Face>]
-            attr_reader :dungeon_mystery_faces
-
-            def initialize(parsed_text)
-                @parsed_text = parsed_text
-                @show_gold_window = false
-                @can_skip_message = false
-                @name = nil
-                @name_color = nil
-                @faces = []
-                @dungeon_mystery_faces = []
-                @align = :left
-                preparse_properties
-            end
-
-            def parse_pkmn_face(info_str)
-                info_message, info_pokemon = info_str.split('!')
-                position, expression, mirror, opacity = info_message.split(',')
-                pkmn_id, pkmn_form, female, shiny = info_pokemon.split(',')
-                face = PkmnFace.new
-
-                position.strip!
-                expression.strip!
-
-                if position == "right" 
-                    face.position = -10
-                elsif position == "left"
-                    face.position = 10
-                else
-                    face.position = position.to_i
-                end  
-                face.set_pkmn_id(pkmn_id)
-                face.opacity = opacity && opacity != "" ? opacity.to_i.clamp(0, 255) : 255
-                face.mirror = mirror == "true"
-                face.pkmn_form = pkmn_form ? pkmn_form.capitalize().strip : ""
-                face.female = (female == "true")
-                face.shiny = (shiny == "true")
-                face.expression = expression.capitalize()
-                
-                face.compute_directory()
-                show_pkmn_name(face.pkmn_name)
-                @dungeon_mystery_faces << face
-            end
-
-            def show_pkmn_name(pkmn_name, color = 23)
-                if SHOW_PKMN_NAME
-                    @parsed_text = "\u0001[#{color}]#{pkmn_name} : \u0001[0]"+ @parsed_text.gsub(/:\[([^\]]+)\]:/, "")
-                end
-            end
-
-            class PkmnFace
-                # Get the face position
-                # @return [Integer]
-                attr_accessor :position
-                # Get the pokemon id in format "0000"
-                # @return [String]
-                attr_accessor :pkmn_id
-                # Get the form of the pokemon
-                # @return [Boolean]
-                attr_accessor :pkmn_form
-                # Get if the pokemn is female
-                # @return [Boolean]
-                attr_accessor :female
-                # Get if the pokemn is shiny
-                # @return [Boolean]
-                attr_accessor :shiny
-                # Get the face opacity
-                # @return [Integer]
-                attr_accessor :opacity
-                # Get the face mirror state
-                # @return [Boolean]
-                attr_accessor :mirror
-                # Get the directory inside the pkmn_id repertory
-                # @return [String]
-                attr_reader :directory
-                # Get the expresson of the face
-                # @return [String]
-                attr_accessor :expression
-                # Get the name of the pkmn
-                # @return [String]
-                attr_accessor :pkmn_name
-                
-                def PkmnFace.parse_tracker(tracker_json)
-                    tracker_result = {}
-                    tracker_json.each do |pkmn_face_info|
-                        pkmn_id = pkmn_face_info[0]
-                        names = parse_subgroup(pkmn_face_info[1],previous_name = "", path ="", previous_nb_expression = 0, first_iteration = true)
-                        tracker_result[pkmn_id] = names
-                    end
-                    return tracker_result
-                end
-                
-                def PkmnFace.parse_subgroup(curr_subgroup, previous_name = "", path ="", previous_nb_expression = 0, first_iteration = false)
-                    names = {}
-                    if curr_subgroup["name"] == "Shiny" or curr_subgroup["name"] == "Female"
-                        curr_name = previous_name +"_"+ curr_subgroup["name"]
-                    else
-                        curr_name = curr_subgroup["name"]
-                    end 
-                    if first_iteration 
-                        curr_name = ""
-                    end
-
-                    curr_expressions = curr_subgroup["portrait_files"].map {|expression, locked| expression}
-                    curr_nb_expressions = curr_expressions.length()
-
-                    #On supprime si il n'y a pas assez de fichiers alternate
-                    if (curr_name == "Alternate" && curr_nb_expressions < previous_nb_expression*0.75 )
-                        return names
-                    end
-
-                    if curr_subgroup["name"] != "" && curr_expressions.length() != 0
-                        names[curr_name.capitalize] = {"path" => path, "expressions" => curr_expressions}
-                    end
-                    
-                    if curr_subgroup["name"] == ""
-                        curr_nb_expressions = previous_nb_expression
-                    end
-
-                    subgroups = curr_subgroup["subgroups"]
-                    subgroups.each do |subgroup_child|
-                        new_path = File.join(path, subgroup_child[0])
-                        names = names.merge(parse_subgroup(subgroup_child[1], curr_name, new_path, curr_nb_expressions))
-                    end
-                    return names
-                end
-
-                
-                file_tracker_content = File.read(File.join('graphics', 'pictures', 'pkmn_faces', "tracker.json"))
-                pkmn_faces_tracker_raw = JSON.parse(file_tracker_content)
-                @@pkmn_faces_tracker = parse_tracker(pkmn_faces_tracker_raw)
-
-              
-                @@expressions_converter = 
-                {
-                    "Normal" => ["Normal"],
-                    "Happy" =>["Joyous","Inspired", "Normal"],
-                    "Pain" => ["Stunned", "Sad", "Dizzy", "Crying", "Normal"],
-                    "Angry" => ["Determined", "Shouting", "Normal"],
-                    "Worried" => ["Teary-Eyed", "Stunned", "Sigh", "Normal"],
-                    "Sad" => ["Crying", "Teary-Eyed", "Pain", "Normal"],
-                    "Crying" => ["Sad", "Teary-Eyed", "Pain", "Normal"],
-                    "Shouting"=>["Determined", "Surprised", "Angry", "Normal"],
-                    "Teary-Eyed" => ["Sad", "Crying", "Worried", "Normal"],
-                    "Determined" => ["Angry", "Shouting", "Normal"],
-                    "Joyous" => ["Happy", "Inspired", "Normal"],
-                    "Inspired" => ["Happy", "Joyous", "Normal"],
-                    "Surprised" => ["Stunned", "Pain", "Normal"],
-                    "Dizzy" => ["Stunned", "Pain", "Normal"],
-                    "Special0" => ["Normal"],
-                    "Special1" => ["Normal"],
-                    "Sigh" => ["Pain", "Normal"],
-                    "Stunned" => ["Surprised", "Dizzy", "Normal"],
-                    "Special2" => ["Normal"],
-                    "Special3" => ["Normal"] 
-                }
-
-                def set_pkmn_id(pkmn_id)
-                    if pkmn_id.to_i == 0
-                        pkmn_id =data_creature(pkmn_id.to_sym).id.to_s
-                    end
-                    @pkmn_name =data_creature(pkmn_id.to_i).name
-                    @pkmn_id = pkmn_id.rjust(4, "0")
-                end
-                
-                def compute_directory()
-                    current_face_infos = @@pkmn_faces_tracker[@pkmn_id]
-                    expressions_list = [@expression] + @@expressions_converter[@expression]
-                    expression_found = false
-                    expression_index = 0
-                    while (expression_found == false && expression_index < expressions_list.length)
-                        expression = expressions_list[expression_index]
-                    
-                        if @pkmn_form == ""
-                            unless try_all_faces_possibilities(current_face_infos, "Alternate", expression)
-                                unless try_all_faces_possibilities(current_face_infos, "Altcolor", expression)
-                                    expression_found = try_all_faces_possibilities(current_face_infos, "", expression)
-                                else
-                                    expression_found = true
-                                end
-                            else
-                                expression_found = true
-                            end
-                        else
-                            unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_alternate", expression)
-                                unless try_all_faces_possibilities(current_face_infos, @pkmn_form + "_altcolor", expression)
-                                    expression_found = try_all_faces_possibilities(current_face_infos, @pkmn_form, expression)
-                                else
-                                    expression_found = true
-                                end
-                            else
-                                expression_found = true
-                            end
-                        end
-                        expression_index = expression_index + 1
-                    end
-                end
-
-                def try_all_faces_possibilities(face_infos, name_face, expression)
-                    if @shiny 
-                        name_face = name_face + "_shiny"
-                    end
-                    if @female
-                        if face_infos.has_key?(name_face + "_female")
-                            name_face = name_face + "_female"
-                        end
-                    end
-
-                    if face_exist?(face_infos, name_face, expression)
-                        if @mirror && face_exist?(face_infos, name_face, expression + "^")
-                            @directory = File.join(face_infos[name_face]["path"], expression + "^")
-                            @mirror = false
-                        else
-                            @directory = File.join(face_infos[name_face]["path"], expression)
-                        end
-                        return true
-                    end
-                    return false
-                end
-
-                def face_exist?(face_infos, name_face, name_expression)
-                    unless face_infos.has_key?(name_face) 
-                        return false
-                    end
-                    expressions = face_infos[name_face]["expressions"]
-                    unless expressions.include?(name_expression)
-                        return false
-                    end
-                    return true
-                end
-
-                
-                def get_directory
-                    if @directory.nil?
-                        return ""
-                    end
-                    return @directory
-                end
-                
-            end
         end
     end
 end
@@ -275,7 +272,9 @@ module UI
 
                 sprite_window_face = Sprite.new(viewport)
                 sprite_window_face.load("window_pkmn_face", :interface)
-                sprite_window_face.set_position(parse_speaker_position(pkmn_face.position)-3, face_pkmn_y(sprite.height)-3)
+                width_shift = (sprite_window_face.width.abs - sprite.width.abs).abs/2
+                height_shift = (sprite_window_face.height.abs - sprite.height.abs)/2
+                sprite_window_face.set_position(parse_speaker_position(pkmn_face.position)-width_shift, face_pkmn_y(sprite.height)-height_shift)
                 @sub_stack.push_sprite(sprite_window_face)
             end
 
